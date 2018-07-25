@@ -8,8 +8,9 @@ package api
 import (
 	"../config"
 	"../logging"
-	"github.com/gin-gonic/gin"
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/pprof"
+	"github.com/gin-gonic/gin"
 )
 
 /* gin app */
@@ -61,6 +62,11 @@ func Start(cfg config.ApiConfig) {
 	/* attach endpoints */
 	attachRoot(r)
 	attachServers(r)
+
+	if cfg.Pprof {
+		pprof.Register(app)
+		log.Info("PPROF enabled")
+	}
 
 	var err error
 	/* start rest api server */
