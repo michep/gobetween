@@ -189,6 +189,14 @@ func (this *Scheduler) Backends() []core.Backend {
 }
 
 /**
+ * Return current backends map
+ */
+func (this *Scheduler) BackendsMap() map[core.Target]*core.Backend {
+
+	return this.backends
+}
+
+/**
  * Updated backend stats
  */
 func (this *Scheduler) HandleBackendStatsChange(target core.Target, bs *counters.BandwidthStats) {

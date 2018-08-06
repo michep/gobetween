@@ -317,6 +317,7 @@ func prepareConfig(name string, server config.Server, defaults config.Connection
 		}
 		fallthrough
 	case "tcp":
+	case "nosessionudp":
 	case "udp":
 		if server.BackendsTls != nil {
 			return config.Server{}, errors.New("backends_tls should not be enabled for udp protocol")

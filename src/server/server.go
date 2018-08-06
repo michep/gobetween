@@ -10,6 +10,7 @@ package server
 import (
 	"../config"
 	"../core"
+	"./nosessionudp"
 	"./tcp"
 	"./udp"
 	"errors"
@@ -24,6 +25,8 @@ func New(name string, cfg config.Server) (core.Server, error) {
 		return tcp.New(name, cfg)
 	case "udp":
 		return udp.New(name, cfg)
+	case "nosessionudp":
+		return nosessionudp.New(name, cfg)
 	default:
 		return nil, errors.New("Can't create server for protocol " + cfg.Protocol)
 	}
