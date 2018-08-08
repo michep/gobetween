@@ -75,7 +75,8 @@ deps: clean-deps
 	github.com/lxc/lxd/shared \
 	github.com/lxc/lxd/shared/api \
 	github.com/pires/go-proxyproto \
-	golang.org/x/crypto/acme/autocert
+	golang.org/x/crypto/acme/autocert \
+	github.com/gin-contrib/pprof
 
 clean-dist:
 	rm -rf ./dist/${VERSION}
