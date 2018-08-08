@@ -40,6 +40,7 @@ type Server struct {
 	serverConn *net.UDPConn
 
 	connections map[core.Target]connection
+	connAvail   bool
 	bufPool     sync.Pool
 
 	/* Access module checks if client is allowed to connect */
@@ -72,6 +73,7 @@ func New(name string, cfg config.Server) (*Server, error) {
 		scheduler:    scheduler,
 		statsHandler: statsHandler,
 		connections:  make(map[core.Target]connection),
+		connAvail:    true,
 		bufPool:      sync.Pool{New: func() interface{} { return new(bytes.Buffer) }},
 	}
 
@@ -132,7 +134,7 @@ func (this *Server) Start() error {
 					}
 					backendConn, err := net.DialUDP("udp", nil, backendAddr)
 					if err != nil {
-						log.Debug("Error connecting to backend: ", err)
+						log.Error("Error connecting to backend: ", err)
 						continue
 					}
 					this.connections[be.Target] = connection{conn: backendConn, backend: be}
@@ -192,21 +194,23 @@ func (this *Server) listen() error {
 			b.Reset()
 			b.Write(buf[:n])
 
-			log.Debug("Got UPD packet")
 			go func(buf *bytes.Buffer, idx uint64) {
 				defer this.bufPool.Put(buf)
 				conn := this.selectConnection(idx)
 				if conn == nil {
-					log.Error("No available backend connections")
+					if this.connAvail {
+						log.Error("No available backend connections")
+						this.connAvail = false
+					}
 					return
 				}
+				this.connAvail = true
 				_, err = conn.conn.Write(buf.Bytes())
 				if err != nil {
 					log.Error("Error sending data to backend: ", err)
 					return
 				}
 
-				log.Debug("Sent UDP packet to ", conn.backend.Target.String())
 				this.scheduler.IncrementTx(*conn.backend, 1)
 
 			}(b, index)
