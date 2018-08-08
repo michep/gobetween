@@ -1,8 +1,9 @@
 package nosessionudp
 
 import (
+	"bytes"
 	"net"
-	//"sync/atomic"
+	"sync"
 	"time"
 
 	"../../balance"
@@ -39,13 +40,7 @@ type Server struct {
 	serverConn *net.UDPConn
 
 	connections map[core.Target]connection
-
-	/* ----- channels ----- */
-	//getOrCreate chan *sessionRequest
-	remove chan net.UDPAddr
-	//stop        chan bool
-
-	/* ----- modules ----- */
+	bufPool     sync.Pool
 
 	/* Access module checks if client is allowed to connect */
 	access *access.Access
@@ -55,26 +50,6 @@ type connection struct {
 	conn    *net.UDPConn
 	backend *core.Backend
 }
-
-/**
- * Request to get session for clientAddr
- */
-//type sessionRequest struct {
-//	clientAddr net.UDPAddr
-//	response   chan sessionResponse
-//}
-
-/**
- * Sessnion request response
- */
-//type sessionResponse struct {
-//	session *session
-//	err     error
-//}
-
-//type Sessions struct {
-//	s map[string]*session
-//}
 
 /**
  * Creates new NoSessionUDP server
@@ -96,9 +71,8 @@ func New(name string, cfg config.Server) (*Server, error) {
 		cfg:          cfg,
 		scheduler:    scheduler,
 		statsHandler: statsHandler,
-		//getOrCreate:  make(chan *sessionRequest),
-		remove:      make(chan net.UDPAddr),
-		connections: make(map[core.Target]connection),
+		connections:  make(map[core.Target]connection),
+		bufPool:      sync.Pool{New: func() interface{} { return new(bytes.Buffer) }},
 	}
 
 	/* Add access if needed */
@@ -205,8 +179,8 @@ func (this *Server) listen() error {
 	// Main proxy loop goroutine
 	go func() {
 		index := uint64(0)
+		buf := make([]byte, UDP_PACKET_SIZE)
 		for {
-			buf := make([]byte, UDP_PACKET_SIZE)
 			n, _, err := this.serverConn.ReadFromUDP(buf)
 
 			if err != nil {
@@ -214,25 +188,29 @@ func (this *Server) listen() error {
 				continue
 			}
 
+			b := this.bufPool.Get().(*bytes.Buffer)
+			b.Reset()
+			b.Write(buf[:n])
+
 			log.Debug("Got UPD packet")
-			go func(buf []byte, idx uint64) {
+			go func(buf *bytes.Buffer, idx uint64) {
+				defer this.bufPool.Put(buf)
 				conn := this.selectConnection(idx)
 				if conn == nil {
 					log.Error("No available backend connections")
 					return
 				}
-				_, err = conn.conn.Write(buf)
+				_, err = conn.conn.Write(buf.Bytes())
 				if err != nil {
 					log.Error("Error sending data to backend: ", err)
 					return
 				}
 
 				log.Debug("Sent UDP packet to ", conn.backend.Target.String())
-				this.scheduler.IncrementTx(*conn.backend, uint(len(buf)))
+				this.scheduler.IncrementTx(*conn.backend, 1)
 
-			}(buf[:n], index)
+			}(b, index)
 
-			//atomic.AddUint64(&index, 1)
 			index += 1
 		}
 	}()
